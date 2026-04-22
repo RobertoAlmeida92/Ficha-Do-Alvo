@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerador de Ficha - Inteligência PCBA</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f0f2f5; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .painel-controles { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; width: 800px; }
+        textarea { width: 100%; padding: 10px; margin-bottom: 5px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; resize: vertical; }
+        .dica-edicao { font-size: 13px; color: #666; margin-bottom: 15px; font-style: italic; }
+        .botoes-acao { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+        button { padding: 10px 15px; border: none; background-color: #003366; color: white; cursor: pointer; border-radius: 4px; font-weight: bold; }
+        button:hover { background-color: #002244; }
+        .btn-secundario { background-color: #28a745; }
+        .btn-secundario:hover { background-color: #218838; }
+        .btn-terciario { background-color: #fd7e14; } /* Laranja para o botão do Word */
+        .btn-terciario:hover { background-color: #e86e04; }
+
+        .ficha-container { width: 800px; background-color: #fff; border: 2px solid #000; padding: 5px; box-shadow: 5px 5px 15px rgba(0,0,0,0.3); position: relative; }
+        .ficha-header { background-color: #003366; color: white; text-align: center; font-weight: bold; padding: 8px 0; border: 1px solid #000; margin-bottom: 5px; text-transform: uppercase; }
+        .ficha-content { display: flex; border: 1px solid #000; position: relative; overflow: hidden; min-height: 250px; }
+
+        .ficha-foto { flex: 0 0 200px; width: 200px; border-right: 1px solid #000; display: flex; justify-content: center; align-items: stretch; background-color: rgba(233, 236, 239, 0.8); position: relative; z-index: 2; }
+        .ficha-foto span { position: absolute; top: 50%; transform: translateY(-50%); color: #6c757d; font-size: 14px; text-align: center; padding: 10px;}
+        .ficha-foto img { width: 100%; height: 100%; object-fit: cover; display: none; position: relative; z-index: 3; }
+        
+        .ficha-dados { flex-grow: 1; display: flex; flex-direction: column; z-index: 2; width: calc(100% - 200px); }
+        .linha-dado { display: flex; padding: 5px 8px; border-bottom: 1px solid #000; font-size: 15px; background-color: #fff; }
+        .linha-dado:last-child { border-bottom: none; }
+        .label { font-weight: bold; margin-right: 6px; text-transform: uppercase; white-space: nowrap; }
+        
+        .valor { font-family: 'Courier New', Courier, monospace; text-transform: uppercase; font-weight: bold; color: #111; flex-grow: 1; outline: none; border-bottom: 1px dashed transparent; transition: all 0.2s; min-height: 18px; word-wrap: break-word; overflow-wrap: break-word; }
+        .valor[contenteditable="true"]:hover { background-color: #ffffcc; cursor: text; }
+        .valor[contenteditable="true"]:focus { background-color: #fff; border-bottom: 1px dashed #003366; }
+    </style>
+</head>
+<body>
+    <div class="painel-controles">
+        <h3>App de Extração - Ficha de Alvo</h3>
+        <textarea id="texto-bruto" rows="6" placeholder="Cole o texto aqui..."></textarea>
+        <div class="dica-edicao">* Dica: Após extrair, clique nos dados da ficha para editar. Você também pode colar a foto (Ctrl+V) em qualquer lugar desta tela.</div>
+        
+        <div style="display: none;">
+            <input type="file" id="upload-foto" accept="image/*">
+        </div>
+
+        <div class="botoes-acao">
+            <button onclick="processarTexto()">1. Extrair para a Ficha</button>
+            <button class="btn-secundario" onclick="baixarImagem()">2. Baixar Ficha (PNG)</button>
+            <button class="btn-terciario" onclick="copiarParaWord()" id="btn-word">3. Copiar para o Word</button>
+            <button style="background-color: #dc3545;" onclick="limparTudo()">4. Limpar Tudo</button>
+        </div>
+    </div>
+
+    <div class="ficha-container" id="ficha-alvo">
+        <div class="ficha-header">DADOS DE IDENTIFICAÇÃO</div>
+        <div class="ficha-content">
+            <div class="ficha-foto" id="area-foto">
+                <span id="placeholder-foto">[ Ctrl+V ]<br>Cole a Foto Aqui</span>
+                <img id="img-alvo" src="" alt="Foto do Alvo">
+            </div>
+            <div class="ficha-dados">
+                <div class="linha-dado"><span class="label">NOME:</span><span class="valor" id="dado-nome" contenteditable="true"></span></div>
+                <div class="linha-dado"><span class="label">NASCIMENTO:</span><span class="valor" id="dado-nascimento" contenteditable="true"></span></div>
+                <div class="linha-dado"><span class="label">NATURALIDADE:</span><span class="valor" id="dado-naturalidade" contenteditable="true"></span></div>
+                <div class="linha-dado"><span class="label">RG:</span><span class="valor" id="dado-rg" contenteditable="true"></span></div>
+                <div class="linha-dado"><span class="label">CPF:</span><span class="valor" id="dado-cpf" contenteditable="true"></span></div>
+                <div class="linha-dado"><span class="label">PAI:</span><span class="valor" id="dado-pai" contenteditable="true"></span></div>
+                <div class="linha-dado"><span class="label">MÃE:</span><span class="valor" id="dado-mae" contenteditable="true"></span></div>
+                <div class="linha-dado" style="flex-grow: 1;"><span class="label">END.:</span><span class="valor" id="dado-end" contenteditable="true"></span></div>
+            </div>
+        </div>
+    </div>
+
+<script>
+        // --- CAPTURA DE CTRL+V (FOTOS E ARQUIVOS COPIADOS) ---
+        window.addEventListener('paste', e => {
+            let file = null;
+
+            // 1. Tenta pegar se for um arquivo de imagem copiado direto de uma pasta (Windows Explorer)
+            if (e.clipboardData.files && e.clipboardData.files.length > 0) {
+                file = Array.from(e.clipboardData.files).find(f => f.type.startsWith('image/'));
+            }
+            
+            // 2. Se não for arquivo, tenta pegar se for um Print Screen / Recorte de Tela
+            if (!file && e.clipboardData.items) {
+                const item = Array.from(e.clipboardData.items).find(i => i.type.startsWith('image/'));
+                if (item) {
+                    file = item.getAsFile();
+                }
+            }
+
+            // Se achou a imagem de qualquer uma das formas, joga na tela
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    const img = document.getElementById('img-alvo');
+                    img.src = event.target.result;
+                    img.style.display = 'block';
+                    document.getElementById('placeholder-foto').style.display = 'none';
+                }
+                reader.readAsDataURL(file);
+            }
+        });
+
+        function processarTexto() {
+            let textoLimpo = document.getElementById('texto-bruto').value;
+            textoLimpo = textoLimpo.replace(/\[\[|\]\]/g, '').replace(/\*/g, ''); 
+            
+            const rotulosParaQuebrar = ["Filiação 1:", "Filiação 2:", "Sexo:", "Tipo Pessoa:", "CPF:", "RG:", "Data Nascimento:", "Nacionalidade:", "Naturalidade - UF:", "Naturalidade - Município:", "EndereçoLogradouro:", "Logradouro:", "Número:", "Bairro:", "CEP:", "Complemento:", "Cidade:", "UF:", "País:", "Documentos"];
+            rotulosParaQuebrar.forEach(r => {
+                textoLimpo = textoLimpo.replace(new RegExp("(" + r + ")", "gi"), "\n$1 ");
+            });
+
+            let dictParalelo = {};
+            const blocosInfo = textoLimpo.split(/(?:\r?\n){2,}/); 
+            if (blocosInfo.length >= 2) {
+                for(let i = 0; i < blocosInfo.length - 1; i++) {
+                    let l1 = blocosInfo[i].split('\n').map(x => x.trim()).filter(x => x);
+                    let l2 = blocosInfo[i+1].split('\n').map(x => x.trim()).filter(x => x);
+                    if (l1.length >= 3 && l1.length === l2.length) {
+                        const isCabecalho = l1.some(r => /NOME|CPF|FILIAÇÃO|D\.\s*N\./i.test(r));
+                        if (isCabecalho) { for(let j = 0; j < l1.length; j++) dictParalelo[l1[j].toUpperCase()] = l2[j]; break; }
+                    }
+                }
+            }
+
+            function buscarValor(padrao) {
+                const match = textoLimpo.match(new RegExp("(?:^|[\\r\\n])[ \\t]*(?:" + padrao + ")[ \\t]*:?[ \\t]*\\r?\\n?[ \\t]*([^\\r\\n]+)", "i"));
+                return match ? match[1].trim() : '';
+            }
+
+            function buscarValorSegundaLinha(padrao) {
+                const match = textoLimpo.match(new RegExp("(?:^|[\\r\\n])[ \\t]*(?:" + padrao + ")[ \\t]*:?[ \\t]*\\r?\\n?[ \\t]*[^\\r\\n]+\\r?\\n[ \\t]*([^\\r\\n]+)", "i"));
+                return match ? match[1].trim() : '';
+            }
+
+            let valNome = dictParalelo['NOME'] || buscarValor("NOME");
+            let valNasc = dictParalelo['D. N.'] || dictParalelo['D.N.'] || buscarValor("Data(?: de )?Nascimento|NASCIMENTO|D\\.\\s*N\\.");
+            let valNat = dictParalelo['NATURALIDADE'] || buscarValor("NATURALIDADE");
+            let valRG = dictParalelo['RG'] || buscarValor("RG");
+            let valCPF = dictParalelo['CPF'] || buscarValor("CPF");
+            let valMae = dictParalelo['FILIAÇÃO 1'] || dictParalelo['MÃE'] || dictParalelo['NOME DA MÃE'] || buscarValor("Filiação 1(?: \\(Mãe\\))?|MÃE|Nome da Mãe|Filiação");
+            let valPai = dictParalelo['FILIAÇÃO 2'] || dictParalelo['PAI'] || buscarValor("Filiação 2(?: \\(Pai\\))?|PAI");
+            if (!valPai) valPai = buscarValorSegundaLinha("Filiação");
+
+            let endLogradouro = buscarValor("Logradouro");
+            let endNumero = buscarValor("Número|Nº");
+            let endComplemento = buscarValor("Complemento");
+            let endBairro = buscarValor("Bairro");
+            let endCidade = buscarValor("Cidade|Região fiscal");
+            let endUF = buscarValor("UF(?:º)?");
+            let endCEP = buscarValor("CEP");
+            let valEnd = buscarValor("ENDEREÇO PRINCIPAL|ENDEREÇO|END\\.");
+            let valMun = dictParalelo['MUNICÍPIO - UF'] || dictParalelo['MUNICIPIO - UF'] || buscarValor("MUNICÍPIO\\s*-\\s*UF|MUNICIPIO\\s*-\\s*UF");
+
+            const rotulosProibidos = ['NOME', 'NASCIMENTO', 'NATURALIDADE', 'RG', 'CPF', 'PAI', 'MÃE', 'NOME DA MÃE', 'ENDEREÇO', 'END', 'MUNICÍPIO', 'CEP', 'DATA', 'TÍTULO', 'SEXO', 'SITUAÇÃO', 'RESIDENTE', 'CÓDIGO', 'TELEFONE', 'UNIDADE', 'INDICATIVO', 'DADOS', 'OCUPAÇÃO', 'NATUREZA', 'ANO', 'COMPLEMENTO', 'BAIRRO', 'CIDADE', 'UF', 'UFº', 'LOGRADOURO', 'NÚMERO', 'Nº', 'FILIAÇÃO', 'ESTRANGEIRO', 'DOCUMENTOS', 'SEQ', 'TIPO', 'PAÍS', 'NACIONALIDADE', 'D. N.', 'D.N.', 'EXERCÍCIO', 'REGIÃO FISCAL', 'TIPO DO PROCESSO', 'DATA DE REGISTRO', 'ALTURA', 'ESTADO CIVIL', 'ESCOLARIDADE', 'PROFISSAO', 'PROFISSÃO', 'INDICADORES', 'DEFICIÊNCIA', 'AUTISMO', 'ÓRGÃO'];
+            
+            function limpar(v) {
+                if (!v) return '';
+                const t = v.trim();
+                return rotulosProibidos.some(r => t.toUpperCase().startsWith(r)) ? '' : t;
+            }
+
+            document.getElementById('dado-nome').innerText = limpar(valNome);
+            document.getElementById('dado-nascimento').innerText = limpar(valNasc);
+            document.getElementById('dado-naturalidade').innerText = limpar(valNat);
+            document.getElementById('dado-rg').innerText = limpar(valRG);
+            document.getElementById('dado-cpf').innerText = limpar(valCPF);
+            document.getElementById('dado-mae').innerText = limpar(valMae);
+            document.getElementById('dado-pai').innerText = limpar(valPai);
+            
+            let partes = [];
+            let baseEnd = limpar(endLogradouro) || limpar(valEnd);
+            if (baseEnd) partes.push(baseEnd + (limpar(endNumero) ? ", " + limpar(endNumero) : ""));
+            else if (limpar(endNumero)) partes.push("Nº " + limpar(endNumero));
+            if (limpar(endComplemento)) partes.push(limpar(endComplemento));
+            if (limpar(endBairro)) partes.push(limpar(endBairro));
+            if (limpar(endCidade)) partes.push(limpar(endCidade) + (limpar(endUF) ? " - " + limpar(endUF) : ""));
+            if (limpar(endCEP)) partes.push("CEP: " + limpar(endCEP));
+            
+            let enderecoCompleto = partes.join(" - ");
+            if (!enderecoCompleto && limpar(valMun)) enderecoCompleto = limpar(valMun);
+            
+            document.getElementById('dado-end').innerText = enderecoCompleto;
+
+            let cpfFinal = document.getElementById('dado-cpf').innerText;
+            if (!cpfFinal) {
+                const cpfSolto = textoLimpo.match(/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/);
+                if (cpfSolto) document.getElementById('dado-cpf').innerText = cpfSolto[0];
+            }
+            
+            let nascFinal = document.getElementById('dado-nascimento').innerText;
+            if (!nascFinal) {
+                const nascSolto = textoLimpo.match(/\d{2}\/\d{2}\/\d{4}/);
+                if (nascSolto) document.getElementById('dado-nascimento').innerText = nascSolto[0];
+            }
+        }
+
+        // --- MOTOR DE CÓPIA ROBUSTO PARA O WORD ---
+        function copiarParaWord() {
+            const nome = document.getElementById('dado-nome').innerText;
+            const nasc = document.getElementById('dado-nascimento').innerText;
+            const nat = document.getElementById('dado-naturalidade').innerText;
+            const rg = document.getElementById('dado-rg').innerText;
+            const cpf = document.getElementById('dado-cpf').innerText;
+            const pai = document.getElementById('dado-pai').innerText;
+            const mae = document.getElementById('dado-mae').innerText;
+            const end = document.getElementById('dado-end').innerText;
+            
+            const imgEl = document.getElementById('img-alvo');
+            let imgTag = '';
+            if (imgEl.style.display !== 'none' && imgEl.src) {
+                imgTag = `<img src="${imgEl.src}" width="130" height="173" style="width: 130px; height: 173px; display:block; margin: 0 auto; object-fit: cover;" />`;
+            } else {
+                imgTag = `<div style="color: #666; font-size: 12px; text-align: center; margin-top: 50px;">[ Foto 3x4 ]</div>`;
+            }
+
+            const tabelaHTML = `
+                <html>
+                <head><meta charset="UTF-8"></head>
+                <body>
+                <table width="600" style="width: 600px; border-collapse: collapse; font-family: Arial, sans-serif; border: 2px solid #000;">
+                    <tr>
+                        <td colspan="2" align="center" valign="middle" style="background-color: #003366; color: white; padding: 6px; border: 1px solid #000; text-align: center; font-weight: bold; font-size: 14px;">
+                            DADOS DE IDENTIFICAÇÃO
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="center" valign="middle" style="width: 140px; border: 1px solid #000; border-right: none; background-color: #f0f2f5; padding: 5px; text-align: center;">
+                            ${imgTag}
+                        </td>
+                        <td valign="top" style="width: 460px; padding: 0; border: 1px solid #000; border-left: none;">
+                            <table width="100%" style="width: 100%; border-collapse: collapse;">
+                                <tr><td style="padding: 4px; border-bottom: 1px solid #000; border-left: 1px solid #000; background-color: #fff; font-size: 12px;"><strong>NOME:</strong> <span style="font-family: 'Courier New', Courier, monospace; text-transform: uppercase;">${nome}</span></td></tr>
+                                <tr><td style="padding: 4px; border-bottom: 1px solid #000; border-left: 1px solid #000; background-color: #f8f9fa; font-size: 12px;"><strong>NASCIMENTO:</strong> <span style="font-family: 'Courier New', Courier, monospace; text-transform: uppercase;">${nasc}</span></td></tr>
+                                <tr><td style="padding: 4px; border-bottom: 1px solid #000; border-left: 1px solid #000; background-color: #fff; font-size: 12px;"><strong>NATURALIDADE:</strong> <span style="font-family: 'Courier New', Courier, monospace; text-transform: uppercase;">${nat}</span></td></tr>
+                                <tr><td style="padding: 4px; border-bottom: 1px solid #000; border-left: 1px solid #000; background-color: #f8f9fa; font-size: 12px;"><strong>RG:</strong> <span style="font-family: 'Courier New', Courier, monospace; text-transform: uppercase;">${rg}</span></td></tr>
+                                <tr><td style="padding: 4px; border-bottom: 1px solid #000; border-left: 1px solid #000; background-color: #fff; font-size: 12px;"><strong>CPF:</strong> <span style="font-family: 'Courier New', Courier, monospace; text-transform: uppercase;">${cpf}</span></td></tr>
+                                <tr><td style="padding: 4px; border-bottom: 1px solid #000; border-left: 1px solid #000; background-color: #f8f9fa; font-size: 12px;"><strong>PAI:</strong> <span style="font-family: 'Courier New', Courier, monospace; text-transform: uppercase;">${pai}</span></td></tr>
+                                <tr><td style="padding: 4px; border-bottom: 1px solid #000; border-left: 1px solid #000; background-color: #fff; font-size: 12px;"><strong>MÃE:</strong> <span style="font-family: 'Courier New', Courier, monospace; text-transform: uppercase;">${mae}</span></td></tr>
+                                <tr><td style="padding: 4px; border-left: 1px solid #000; background-color: #f8f9fa; font-size: 12px;"><strong>END.:</strong> <span style="font-family: 'Courier New', Courier, monospace; text-transform: uppercase;">${end}</span></td></tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table><br>
+                </body>
+                </html>
+            `;
+
+            function sinalizarSucesso() {
+                const btn = document.getElementById('btn-word');
+                const textoOriginal = btn.innerText;
+                btn.innerText = "Copiado com Sucesso! ✔️";
+                btn.style.backgroundColor = "#28a745"; 
+                setTimeout(() => {
+                    btn.innerText = textoOriginal;
+                    btn.style.backgroundColor = ""; 
+                }, 2000);
+            }
+
+            if (navigator.clipboard && window.ClipboardItem) {
+                const blob = new Blob([tabelaHTML], { type: "text/html" });
+                const data = [new ClipboardItem({ "text/html": blob })];
+                
+                navigator.clipboard.write(data).then(() => {
+                    sinalizarSucesso();
+                }).catch(() => {
+                    fallbackCopiar(tabelaHTML); 
+                });
+            } else {
+                fallbackCopiar(tabelaHTML);
+            }
+
+            function fallbackCopiar(htmlCode) {
+                const divTemp = document.createElement('div');
+                divTemp.innerHTML = htmlCode;
+                divTemp.style.position = 'absolute';
+                divTemp.style.top = window.scrollY + 'px'; 
+                divTemp.style.left = '0px';
+                divTemp.style.opacity = '0.0001'; 
+                divTemp.style.pointerEvents = 'none';
+                document.body.appendChild(divTemp);
+
+                const range = document.createRange();
+                range.selectNode(divTemp.querySelector('table')); 
+                const selecao = window.getSelection();
+                selecao.removeAllRanges();
+                selecao.addRange(range);
+                
+                try {
+                    document.execCommand('copy');
+                    sinalizarSucesso();
+                } catch (err) {
+                    alert('Erro ao copiar.');
+                }
+
+                selecao.removeAllRanges();
+                
+                setTimeout(() => {
+                    if (document.body.contains(divTemp)) {
+                        document.body.removeChild(divTemp);
+                    }
+                }, 3000);
+            }
+        }
+
+        function baixarImagem() {
+            const node = document.getElementById('ficha-alvo');
+            document.querySelectorAll('.valor').forEach(c => c.blur());
+            let nome = document.getElementById('dado-nome').innerText.trim() || "ficha_alvo";
+            let nomeArquivo = nome.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9\s]/g, "").replace(/\s+/g, '_') + ".png";
+            html2canvas(node, { scale: 2, backgroundColor: "#ffffff" }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = nomeArquivo;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            });
+        }
+
+        function limparTudo() { location.reload(); }
+    </script></body>
+</html>
